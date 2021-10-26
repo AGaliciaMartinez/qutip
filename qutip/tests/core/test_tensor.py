@@ -40,6 +40,9 @@ from qutip import (
     tensor_contract, tensor_swap, num, QobjEvo, destroy, tensor
 )
 
+from qutip.core.data import CSR, Dense
+import pytest
+
 
 def test_tensor_contract_ident():
     qobj = identity([2, 3, 4])
@@ -170,3 +173,35 @@ def test_tensor_and():
     assert tensor(evo, sx)(t) == (evo & sx)(t)
     assert tensor(sx, evo)(t) == (sx & evo)(t)
     assert tensor(evo, evo)(t) == (evo & evo)(t)
+
+
+@pytest.mark.parametrize(["dtype_in1", "dtype_in2", "dtype_out"],
+                         [(Dense, Dense, Dense),
+                          (CSR, CSR, CSR),
+                          (Dense, CSR, Dense)
+                         ])
+def test_tensor_dtype_default(dtype_in1, dtype_in2, dtype_out):
+    """Test that the default dtype does not change the output."""
+    qobj1 = Qobj([1,2])
+
+    qobj1 = qobj1.to(dtype_in1)
+    qobj2 = qobj1.to(dtype_in2)
+
+    out = tensor([qobj1, qobj2])
+    assert isinstance(out.data, dtype_out)
+
+
+@pytest.mark.parametrize("dtype_in1", [Dense, CSR])
+@pytest.mark.parametrize("dtype_in2", [Dense, CSR])
+@pytest.mark.parametrize("dtype_out", [Dense, CSR])
+def test_tensor_dtype(dtype_in1, dtype_in2, dtype_out):
+    """Test that dtype works for the existing data classes."""
+    qobj1 = Qobj([1,2])
+
+    qobj1 = qobj1.to(dtype_in1)
+    qobj2 = qobj1.to(dtype_in2)
+
+    out = tensor(qobj1, qobj2, dtype=dtype_out)
+
+    assert isinstance(out.data, dtype_out)
+
