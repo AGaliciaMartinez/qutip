@@ -84,7 +84,6 @@ shape = [4, 4], type = oper, isHerm = True
      [ 1.+0.j  0.+0.j  0.+0.j  0.+0.j]]
     """
     from .cy.qobjevo import QobjEvo
-    print(args)
 
     if dtype is not None:
         args = [arg.to(dtype) for arg in args]
