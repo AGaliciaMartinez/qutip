@@ -87,7 +87,7 @@ shape = [4, 4], type = oper, isHerm = True
     print(args)
 
     if dtype is not None:
-        args = [ arg.to(dtype) for arg in args ]
+        args = [arg.to(dtype) for arg in args]
 
     if not args:
         raise TypeError("Requires at least one input argument")
