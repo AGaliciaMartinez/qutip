@@ -10,7 +10,160 @@ from ..core.data import to
 from time import time
 
 
-class Solver:
+class _Solver:
+    """
+    Runner for an evolution.
+    Can run the evolution at once using :method:`run` or step by step using
+    :method:`start` and :method:`step`.
+
+    Parameters
+    ----------
+    options : SolverOptions
+        Options for the solver
+
+    Attributes
+    ----------
+    options : SolverOptions
+        Options for the solver
+
+    stats: dict
+        Diverse statistics of the evolution.
+
+    t : float, int
+        Current time of the system.
+
+    state : qobj
+        Current state of the system.
+    """
+    name = "generic"
+
+    # Class of option used by the solver
+    optionsclass = SolverOptions
+    resultclass = Results
+
+    def __init__(self, *, options=None):
+        self.options = options
+        self.stats = {"preparation time": 0}
+        self._state_metadata = {}
+
+    def run(self, state0, tlist, *, args=None, options=None, e_ops=None):
+        """
+        Evolve the Quantum system.
+
+        This method is roughly equivalent to ::
+            solver.start()
+            for t in tlist[1:]:
+                state, t = solver.step(t)
+                self.result.add(t, state)
+
+        Parameters
+        ----------
+        state0 : :class:`Qobj`
+            Initial state of the evolution.
+
+        tlist : list of double
+            Time for which to save the results (state and/or expect) of the
+            evolution. The first element of the list is the initial time of the
+            evolution. Each times of the list must be increasing, but does not
+            need to be uniformy distributed.
+
+        args : dict, optional {None}
+            Change the ``args`` of the rhs for the evolution.
+
+        e_ops : list {None}
+            List of Qobj, QobjEvo or callable to compute the expectation
+            values. Function[s] must have the signature
+            f(t : float, state : Qobj) -> expect.
+
+        Return
+        ------
+        results : :class:`qutip.solver.Result`
+            Results of the evolution. States and/or expect will be saved. You
+            can control the saved data in the options.
+        """
+
+        _time_start = time()
+        if options:
+            self.option = options
+        self.start(state0, tlist[0], args=args, options=options)
+        self.stats["preparation time"] += time() - _time_start
+
+        progress_bar = progess_bars[self.options['progress_bar']]()
+        progress_bar.start(len(tlist)-1, **self.options['progress_kwargs'])
+
+        results = resultclass(e_ops, self.options.results,
+                         self.rhs.issuper, _data0.shape[1]!=1)
+        results.add(tlist[0], state0)
+
+        for t in tlist[1:]:
+            progress_bar.update()
+            state, t = self.step(t)
+            self.results.add(t, state)
+
+        progress_bar.finished()
+
+        self.stats['run time'] = progress_bar.total_time()
+        self.results.stats = self.stats.copy()
+        self.results.solver = self.name
+        return results
+
+
+    def start(self, state0, t0, result_class=Results):
+        """
+        Set the initial state and time for a step evolution.
+        ``options`` for the evolutions are read at this step.
+
+        This method is meant to be overwriten.
+
+        Parameters
+        ----------
+        state0 : :class:`Qobj`
+            Initial state of the evolution.
+
+        t0 : double
+            Initial time of the evolution.
+        """
+        self.results = Results()
+
+
+    def step(self, t, *, args=None, copy=True):
+        """
+        Evolve the state to ``t`` and return the state as a :class:`Qobj`.
+
+        This function is meant to be written by subclasses.
+
+        Parameters
+        ----------
+        t : double
+            Time to evolve to, must be higher than the last call.
+
+        args : dict, optional {None}
+            Update the ``args`` of the system.
+            The change is effective from the beginning of the interval.
+            Changing ``args`` can slow the evolution.
+
+        copy : bool, optional {True}
+            Whether to return a copy of the data or the data in the ODE solver.
+        """
+
+
+    @property
+    def options(self):
+        return self._options
+
+    @options.setter
+    def options(self, new):
+        if new is None:
+            new = self.optionsclass()
+        elif isinstance(new, dict):
+            new = self.optionsclass(**new)
+        elif not isinstance(new, self.optionsclass):
+            raise TypeError("options must be an instance of" +
+                            str(self.optionsclass))
+        self._options = new
+
+
+class LinearODESolver(_Solver):
     """
     Runner for an evolution.
     Can run the evolution at once using :method:`run` or step by step using
@@ -39,14 +192,11 @@ class Solver:
     """
     name = "generic"
 
-    # State, time and Integrator of the stepper functionnality
-    _t = 0
-    _state = None
+    # State, time and Integrator of the stepper functionality
     _integrator = False
     _avail_integrators = {}
 
     # Class of option used by the solver
-    optionsclass = SolverOptions
     odeoptionsclass = SolverOdeOptions
 
     def __init__(self, rhs, *, options=None):
@@ -54,7 +204,7 @@ class Solver:
             self.rhs = QobjEvo(rhs)
         else:
             TypeError("The rhs must be a QobjEvo")
-        self.options = options
+        self.options = s
         self.stats = {"preparation time": 0}
         self._state_metadata = {}
 
@@ -99,71 +249,6 @@ class Solver:
         else:
             return Qobj(state, **self._state_metadata, copy=copy)
 
-    def run(self, state0, tlist, *, args=None, e_ops=None, options=None):
-        """
-        Do the evolution of the Quantum system.
-
-        For a ``state0`` at time ``tlist[0]`` do the evolution as directed by
-        ``rhs`` and for each time in ``tlist`` store the state and/or
-        expectation values in a :cls:`Result`. The evolution method and stored
-        results are determined by ``options``.
-
-        Parameters
-        ----------
-        state0 : :class:`Qobj`
-            Initial state of the evolution.
-
-        tlist : list of double
-            Time for which to save the results (state and/or expect) of the
-            evolution. The first element of the list is the initial time of the
-            evolution. Each times of the list must be increasing, but does not
-            need to be uniformy distributed.
-
-        args : dict, optional {None}
-            Change the ``args`` of the rhs for the evolution.
-
-        e_ops : list {None}
-            List of Qobj, QobjEvo or callable to compute the expectation
-            values. Function[s] must have the signature
-            f(t : float, state : Qobj) -> expect.
-
-        options : SolverOptions {None}
-            Options for the solver
-
-        Return
-        ------
-        results : :class:`qutip.solver.Result`
-            Results of the evolution. States and/or expect will be saved. You
-            can control the saved data in the options.
-        """
-        _data0 = self._prepare_state(state0)
-        _integrator = self._get_integrator()
-        if options is not None:
-            self.options = options
-        if args:
-            _integrator.arguments(args)
-        _time_start = time()
-        _integrator.set_state(tlist[0], _data0)
-        self.stats["preparation time"] += time() - _time_start
-        results = Result(e_ops, self.options.results,
-                         self.rhs.issuper, _data0.shape[1]!=1)
-        results.add(tlist[0], state0)
-
-        progress_bar = progess_bars[self.options['progress_bar']]()
-        progress_bar.start(len(tlist)-1, **self.options['progress_kwargs'])
-        for t, state in _integrator.run(tlist):
-            progress_bar.update()
-            results.add(t, self._restore_state(state, copy=False))
-        progress_bar.finished()
-
-        self.stats['run time'] = progress_bar.total_time()
-        # TODO: It would be nice if integrator could give evolution statistics
-        # self.stats.update(_integrator.stats)
-        self.stats["method"] = _integrator.name
-        results.stats = self.stats.copy()
-        results.solver = self.name
-        return results
-
     def start(self, state0, t0):
         """
         Set the initial state and time for a step evolution.
@@ -177,12 +262,10 @@ class Solver:
         t0 : double
             Initial time of the evolution.
         """
-        _time_start = time()
         self._t = t0
         self._state = self._prepare_state(state0)
         self._integrator = self._get_integrator()
         self._integrator.set_state(self._t, self._state)
-        self.stats["preparation time"] += time() - _time_start
 
     def step(self, t, *, args=None, options=None, copy=True):
         """
@@ -235,21 +318,6 @@ class Solver:
         else:
             raise ValueError("Integrator method not supported.")
         return integrator(self.rhs, self.options.ode)
-
-    @property
-    def options(self):
-        return self._options
-
-    @options.setter
-    def options(self, new):
-        if new is None:
-            new = self.optionsclass()
-        elif isinstance(new, dict):
-            new = self.optionsclass(**new)
-        elif not isinstance(new, self.optionsclass):
-            raise TypeError("options must be an instance of" +
-                            str(self.optionsclass))
-        self._options = new
 
     @classmethod
     def avail_integrators(cls):
