@@ -119,8 +119,8 @@ cdef class QobjEvo:
     num_elements
         Number of parts composing the system.
 
-    const:
-        Does the system change depending on `t`.
+    isconstant:
+        Indicates if the system is constant in time.
 
     isoper:
         Indicates if the system represents an operator.
