@@ -25,7 +25,7 @@ and [J. R. Johansson](https://github.com/jrjohansson)
 > **Note**
 >
 > The master branch now contains the alpha version of QuTiP 5. This is major
-> revision that breaks compatibility in many small ways withh QuTiP 4.7.
+> revision that breaks compatibility in many small ways with QuTiP 4.7.
 >
 > If you need to track QuTiP 4.7 changes or submit pull requests for 4.7,
 > please use the `qutip-4.7.X` branch.
